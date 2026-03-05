@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>银行内部信贷利率计算器</title>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <!-- 统一的 Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1a56db',
+                        secondary: '#4b5563',
+                        accent: '#0ea5e9',
+                        neutral: '#f3f4f6',
+                        'neutral-dark': '#9ca3af',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        card: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .transition-height {
+                transition: max-height 0.3s ease-in-out;
+            }
+            .table-fixed-layout {
+                table-layout: fixed;
+            }
+            .text-balance {
+                text-wrap: balance;
+            }
+        }
+    </style>
+    <style>
+        /* 自定义滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a1a1a1;
+        }
+        
+        /* 平滑滚动 */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* 表格展开/折叠动画 */
+        .table-container {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out;
+        }
+        .table-container.expanded {
+            max-height: 500px; /* 可根据需要调整 */
+        }
+        
+        /* 输入框聚焦效果 */
+        .form-input:focus {
+            box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.2);
+        }
+        
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(26, 86, 219, 0.3);
+            border-radius: 50%;
+            border-top-color: #1a56db;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div class="min-h-screen flex flex-col">
+        <!-- 顶部导航栏 -->
+        <header class="bg-primary text-white shadow-md">
+            <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+                <div class="flex items-center space-x-2">
+                    <i class="fa fa-bank text-2xl"></i>
+                    <h1 class="text-xl font-bold">银行内部信贷利率计算器</h1>
+                </div>
+                <div class="text-sm">
+                    <span id="current-date-time"></span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="flex-grow container mx-auto px-4 py-6">
+            <!-- 输入表单卡片 -->
+            <div class="bg-white rounded-lg shadow-card p-6 mb-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <i class="fa fa-calculator mr-2 text-primary"></i>
+                    借贷参数设置
+                </h2>
+                <form id="loan-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- 贷款金额 -->
+                    <div class="space-y-2">
+                        <label for="loan-amount" class="block text-sm font-medium text-gray-700">贷款金额</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="number" id="loan-amount" name="loan-amount" min="1000" max="100000000" step="1000" value="100000" 
+                                class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
+                                required>
+                            <select id="amount-unit" name="amount-unit" class="form-select rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                <option value="yuan">元</option>
+                                <option value="wan">万元</option>
+                            </select>
+                        </div>
+                        <p class="text-xs text-gray-500">请输入贷款金额，范围：1,000 - 100,000,000</p>
+                    </div>
+
+                    <!-- 贷款期限 -->
+                    <div class="space-y-2">
+                        <label for="loan-term" class="block text-sm font-medium text-gray-700">贷款期限</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="number" id="loan-term" name="loan-term" min="1" max="360" step="1" value="12" 
+                                class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
+                                required>
+                            <select id="term-unit" name="term-unit" class="form-select rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                <option value="month">月</option>
+                                <option value="year">年</option>
+                                <option value="day">日</option>
+                            </select>
+                        </div>
+                        <p class="text-xs text-gray-500">请输入贷款期限，按月/年/日计算</p>
+                    </div>
+
+                    <!-- 年利率 -->
+                    <div class="space-y-2">
+                        <label for="annual-rate" class="block text-sm font-medium text-gray-700">年利率 (%)</label>
+                        <input type="number" id="annual-rate" name="annual-rate" min="0.1" max="36" step="0.01" value="4.35" 
+                            class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
+                            required>
+                        <p class="text-xs text-gray-500">请输入年利率，范围：0.1% - 36%</p>
+                    </div>
+
+                    <!-- 还款方式 -->
+                    <div class="space-y-2 md:col-span-2 lg:col-span-3">
+                        <label class="block text-sm font-medium text-gray-700">还款方式</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                            <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="repayment-method" value="equal-principal-interest" class="form-radio h-4 w-4 text-primary" checked>
+                                <span class="ml-2 text-sm">等额本息</span>
+                            </label>
+                            <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="repayment-method" value="equal-principal" class="form-radio h-4 w-4 text-primary">
+                                <span class="ml-2 text-sm">等额本金</span>
+                            </label>
+                            <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="repayment-method" value="interest-at-maturity" class="form-radio h-4 w-4 text-primary">
+                                <span class="ml-2 text-sm">到期还本付息</span>
+                            </label>
+                            <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="repayment-method" value="daily-interest" class="form-radio h-4 w-4 text-primary">
+                                <span class="ml-2 text-sm">按日计息随借随还</span>
+                            </label>
+                            <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="repayment-method" value="interest-first" class="form-radio h-4 w-4 text-primary">
+                                <span class="ml-2 text-sm">先息后本</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 还款日期设置 -->
+                    <div id="payment-date-params" class="space-y-2 md:col-span-2 lg:col-span-3">
+                        <label class="block text-sm font-medium text-gray-700">还款日期设置</label>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label for="first-payment-date" class="block text-sm font-medium text-gray-700">首次还款日期</label>
+                                <input type="date" id="first-payment-date" name="first-payment-date" 
+                                    class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                            </div>
+                            <div>
+                                <label for="payment-frequency" class="block text-sm font-medium text-gray-700">还款频率</label>
+                                <select id="payment-frequency" name="payment-frequency" class="form-select rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                    <option value="monthly">每月</option>
+                                    <option value="quarterly">每季度</option>
+                                    <option value="semi-annually">每半年</option>
+                                    <option value="annually">每年</option>
+                                </select>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500">设置首次还款日期和还款频率，系统将自动计算每期还款日期</p>
+                    </div>
+                    
+                    <!-- 特殊还款方式参数 -->
+                    <div id="special-method-params" class="space-y-2 md:col-span-2 lg:col-span-3 hidden">
+                        <!-- 按日计息参数 -->
+                        <div id="daily-interest-params-content" class="space-y-2 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="withdrawal-amount" class="block text-sm font-medium text-gray-700">提款金额</label>
+                                    <div class="flex items-center space-x-2">
+                                        <input type="number" id="withdrawal-amount" name="withdrawal-amount" min="0" step="1000" value="50000" 
+                                            class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                        <span class="text-sm text-gray-500">元</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label for="withdrawal-days" class="block text-sm font-medium text-gray-700">提款天数</label>
+                                    <input type="number" id="withdrawal-days" name="withdrawal-days" min="1" max="365" value="30" 
+                                        class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500">按日计息模式下，可模拟部分提款场景</p>
+                        </div>
+                        
+                        <!-- 先息后本参数 -->
+                        <div id="interest-first-params-content" class="space-y-2 hidden">
+                            <div>
+                                <label for="interest-payment-frequency" class="block text-sm font-medium text-gray-700">利息支付频率</label>
+                                <select id="interest-payment-frequency" name="interest-payment-frequency" class="form-select rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                    <option value="monthly">每月</option>
+                                    <option value="quarterly">每季度</option>
+                                    <option value="semi-annually">每半年</option>
+                                    <option value="annually">每年</option>
+                                </select>
+                            </div>
+                            <p class="text-xs text-gray-500">先息后本模式下，每期仅支付利息，到期一次性归还本金</p>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- 操作按钮 -->
+                <div class="mt-6 flex flex-wrap gap-3">
+                    <button id="calculate-btn" type="button" class="btn-primary bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-md flex items-center">
+                        <i class="fa fa-calculator mr-2"></i>
+                        计算还款计划
+                    </button>
+                    <button id="reset-btn" type="button" class="btn-secondary bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-6 py-2 rounded-md flex items-center">
+                        <i class="fa fa-refresh mr-2"></i>
+                        重置
+                    </button>
+                    <button id="export-btn" type="button" class="btn-secondary bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-6 py-2 rounded-md flex items-center">
+                        <i class="fa fa-download mr-2"></i>
+                        导出结果
+                    </button>
+                </div>
+            </div>
+
+            <!-- 计算结果区 -->
+            <div id="results-section" class="space-y-6">
+                <!-- 结果摘要卡片 -->
+                <div class="bg-white rounded-lg shadow-card p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fa fa-bar-chart mr-2 text-primary"></i>
+                        还款计划摘要
+                    </h2>
+                    <div id="summary-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- 摘要数据将通过JS动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 图表比较 -->
+                <div class="bg-white rounded-lg shadow-card p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fa fa-pie-chart mr-2 text-primary"></i>
+                        还款方式对比
+                    </h2>
+                    <div class="h-80">
+                        <canvas id="comparison-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 详细还款计划 -->
+                <div id="detailed-results" class="space-y-6">
+                    <!-- 详细还款计划将通过JS动态生成 -->
+                </div>
+                
+                <!-- 计算方式说明 -->
+                <div class="bg-white rounded-lg shadow-card p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fa fa-info-circle mr-2 text-primary"></i>
+                        计算方式说明
+                    </h2>
+                    <div id="calculation-method-explanation" class="space-y-4 text-sm text-gray-700">
+                        <!-- 计算方式说明将通过JS动态生成 -->
+                        <p class="text-center text-gray-500">请选择还款方式并点击计算按钮查看计算方式说明</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 辅助信息区 -->
+        <aside class="container mx-auto px-4 py-6">
+            <div class="bg-white rounded-lg shadow-card p-6 mb-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <i class="fa fa-info-circle mr-2 text-primary"></i>
+                    借贷方式说明
+                </h2>
+                <div class="space-y-4 text-sm text-gray-700">
+                    <div>
+                        <h3 class="font-medium text-primary">等额本息</h3>
+                        <p>每月还款金额相同，前期还款中利息占比较大，本金占比较小，适合收入稳定的借款人。</p>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-primary">等额本金</h3>
+                        <p>每月还款本金相同，利息逐月递减，总利息较等额本息少，但前期还款压力较大。</p>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-primary">到期还本付息</h3>
+                        <p>贷款期满后一次性归还本金和利息，适合短期贷款或有一次性还款能力的客户。</p>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-primary">按日计息随借随还</h3>
+                        <p>根据实际使用天数计算利息，可随时还款，适合资金使用灵活的客户。</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 页脚 -->
+        <footer class="bg-gray-800 text-white py-6">
+            <div class="container mx-auto px-4">
+                <div class="flex flex-col md:flex-row justify-between items-center">
+                    <div class="mb-4 md:mb-0">
+                        <p class="text-sm">&copy; 2025 银行内部系统. 保留所有权利.</p>
+                    </div>
+                    <div class="text-sm">
+                        <p>版本 1.0.0 | 仅供银行内部使用</p>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 导出结果模态框 -->
+    <div id="export-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-800">导出计算结果</h3>
+                <button id="close-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">选择导出格式</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                            <input type="radio" name="export-format" value="excel" class="form-radio h-4 w-4 text-primary" checked>
+                            <span class="ml-2 text-sm">Excel (.xlsx)</span>
+                        </label>
+                        <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                            <input type="radio" name="export-format" value="pdf" class="form-radio h-4 w-4 text-primary">
+                            <span class="ml-2 text-sm">PDF (.pdf)</span>
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">选择导出内容</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" name="export-content" value="summary" class="form-checkbox h-4 w-4 text-primary" checked>
+                            <span class="ml-2 text-sm">还款计划摘要</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="export-content" value="details" class="form-checkbox h-4 w-4 text-primary" checked>
+                            <span class="ml-2 text-sm">详细还款计划</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="export-content" value="calculation-methods" class="form-checkbox h-4 w-4 text-primary" checked>
+                            <span class="ml-2 text-sm">计算方式说明</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="pt-4 flex justify-end">
+                    <button id="cancel-export" class="btn-secondary bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-md mr-3">
+                        取消
+                    </button>
+                    <button id="confirm-export" class="btn-primary bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md flex items-center">
+                        <i class="fa fa-download mr-2"></i>
+                        确认导出
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 计算方式详情模态框 -->
+    <div id="calculation-detail-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-800" id="calculation-detail-title">计算方式详情</h3>
+                <button id="close-calculation-detail" class="text-gray-500 hover:text-gray-700">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <div id="calculation-detail-content" class="space-y-4 text-sm text-gray-700">
+                <!-- 计算方式详情将通过JS动态生成 -->
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button id="close-calculation-detail-btn" class="btn-secondary bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-md">
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>调试计算器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="p-8">
+    <h1 class="text-2xl font-bold mb-4">银行内部信贷利率计算器 - 调试模式</h1>
+    
+    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+        <h2 class="text-xl font-semibold mb-4">调试信息</h2>
+        
+        <div id="debug-info" class="space-y-4">
+            <!-- 调试信息将在这里显示 -->
+        </div>
+    </div>
+    
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <h2 class="text-xl font-semibold mb-4">测试按钮</h2>
+        
+        <button id="test-calculate" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md mb-4">
+            测试 calculateLoan 函数
+        </button>
+        
+        <button id="test-validate" class="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md mb-4">
+            测试 validateInputs 函数
+        </button>
+        
+        <button id="test-update-ui" class="bg-purple-500 hover:bg-purple-600 text-white px-4 py-2 rounded-md">
+            测试 updateResultsUI 函数
+        </button>
+    </div>
+
+    <script>
+        // 模拟 loanData
+        let loanData = {
+            amount: 100000,
+            amountUnit: 'yuan',
+            term: 12,
+            termUnit: 'month',
+            annualRate: 4.35,
+            repaymentMethod: 'equal-principal-interest',
+            firstPaymentDate: '2025-12-25',
+            paymentFrequency: 'monthly',
+            withdrawalAmount: 50000,
+            withdrawalDays: 30,
+            interestPaymentFrequency: 'monthly'
+        };
+        
+        let calculationResults = {};
+        
+        function addDebugInfo(message) {
+            const debugInfo = document.getElementById('debug-info');
+            const div = document.createElement('div');
+            div.className = 'p-2 border border-gray-200 rounded';
+            div.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            debugInfo.appendChild(div);
+        }
+        
+        function validateInputs() {
+            addDebugInfo('开始验证输入...');
+            
+            // 验证贷款金额
+            if (loanData.amount <= 0) {
+                addDebugInfo('❌ 贷款金额必须大于0');
+                return false;
+            }
+            addDebugInfo('✅ 贷款金额验证通过');
+            
+            // 验证贷款期限
+            if (loanData.term <= 0) {
+                addDebugInfo('❌ 贷款期限必须大于0');
+                return false;
+            }
+            addDebugInfo('✅ 贷款期限验证通过');
+            
+            // 验证年利率
+            if (loanData.annualRate <= 0) {
+                addDebugInfo('❌ 年利率必须大于0');
+                return false;
+            }
+            addDebugInfo('✅ 年利率验证通过');
+            
+            // 验证首次还款日期
+            if (!loanData.firstPaymentDate) {
+                addDebugInfo('❌ 请选择首次还款日期');
+                return false;
+            }
+            addDebugInfo('✅ 首次还款日期验证通过');
+            
+            // 验证首次还款日期不能早于今天
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const firstPaymentDate = new Date(loanData.firstPaymentDate);
+            
+            if (firstPaymentDate < today) {
+                addDebugInfo('❌ 首次还款日期不能早于今天');
+                return false;
+            }
+            addDebugInfo('✅ 首次还款日期时间验证通过');
+            
+            // 验证按日计息参数
+            if (loanData.repaymentMethod === 'daily-interest') {
+                if (loanData.withdrawalAmount <= 0) {
+                    addDebugInfo('❌ 提款金额必须大于0');
+                    return false;
+                }
+                addDebugInfo('✅ 提款金额验证通过');
+                
+                if (loanData.withdrawalDays <= 0) {
+                    addDebugInfo('❌ 提款天数必须大于0');
+                    return false;
+                }
+                addDebugInfo('✅ 提款天数验证通过');
+                
+                if (loanData.withdrawalAmount > loanData.amountUnit === 'wan' ? loanData.amount * 10000 : loanData.amount) {
+                    addDebugInfo('❌ 提款金额不能大于贷款金额');
+                    return false;
+                }
+                addDebugInfo('✅ 提款金额与贷款金额关系验证通过');
+            }
+            
+            addDebugInfo('✅ 所有输入验证通过');
+            return true;
+        }
+        
+        function calculateEqualPrincipalInterest(principal, term, monthlyRate, paymentDates, frequency) {
+            addDebugInfo('开始计算等额本息...');
+            const schedule = [];
+            let remainingPrincipal = principal;
+            
+            let periodRate = monthlyRate;
+            switch (frequency) {
+                case 'quarterly':
+                    periodRate = monthlyRate * 3;
+                    break;
+                case 'semi-annually':
+                    periodRate = monthlyRate * 6;
+                    break;
+                case 'annually':
+                    periodRate = monthlyRate * 12;
+                    break;
+            }
+            
+            const periodPayment = principal * periodRate * Math.pow(1 + periodRate, term) / 
+                (Math.pow(1 + periodRate, term) - 1);
+            
+            for (let i = 1; i <= term; i++) {
+                const interestPayment = remainingPrincipal * periodRate;
+                const principalPayment = periodPayment - interestPayment;
+                remainingPrincipal -= principalPayment;
+                
+                schedule.push({
+                    period: i,
+                    paymentDate: paymentDates[i - 1] ? paymentDates[i - 1].toISOString().split('T')[0] : '',
+                    payment: periodPayment,
+                    principal: principalPayment,
+                    interest: interestPayment,
+                    remainingPrincipal: remainingPrincipal
+                });
+            }
+            
+            const totalPayment = periodPayment * term;
+            const totalInterest = totalPayment - principal;
+            
+            addDebugInfo(`✅ 等额本息计算完成，总还款额: ${totalPayment.toFixed(2)}`);
+            
+            return {
+                method: '等额本息',
+                periodPayment: periodPayment,
+                totalPayment: totalPayment,
+                totalInterest: totalInterest,
+                schedule: schedule,
+                frequency: frequency
+            };
+        }
+        
+        function generatePaymentDates(firstDate, term, frequency) {
+            addDebugInfo('开始生成还款日期...');
+            const dates = [];
+            const firstPaymentDate = new Date(firstDate);
+            
+            dates.push(firstPaymentDate);
+            
+            for (let i = 1; i < term; i++) {
+                const nextDate = new Date(firstPaymentDate);
+                
+                switch (frequency) {
+                    case 'monthly':
+                        nextDate.setMonth(firstPaymentDate.getMonth() + i);
+                        break;
+                    case 'quarterly':
+                        nextDate.setMonth(firstPaymentDate.getMonth() + i * 3);
+                        break;
+                    case 'semi-annually':
+                        nextDate.setMonth(firstPaymentDate.getMonth() + i * 6);
+                        break;
+                    case 'annually':
+                        nextDate.setFullYear(firstPaymentDate.getFullYear() + i);
+                        break;
+                    default:
+                        nextDate.setMonth(firstPaymentDate.getMonth() + i);
+                }
+                
+                dates.push(nextDate);
+            }
+            
+            addDebugInfo(`✅ 还款日期生成完成，共 ${dates.length} 个日期`);
+            return dates;
+        }
+        
+        function calculateLoan() {
+            addDebugInfo('🔄 开始执行 calculateLoan 函数');
+            
+            // 验证输入
+            if (!validateInputs()) {
+                addDebugInfo('❌ 输入验证失败，停止计算');
+                return;
+            }
+            
+            // 转换贷款金额为元
+            const principal = loanData.amountUnit === 'wan' ? loanData.amount * 10000 : loanData.amount;
+            addDebugInfo(`贷款本金: ${principal} 元`);
+            
+            // 转换贷款期限
+            let termInMonths = 0;
+            switch (loanData.termUnit) {
+                case 'day':
+                    termInMonths = loanData.term / 30;
+                    break;
+                case 'month':
+                    termInMonths = loanData.term;
+                    break;
+                case 'year':
+                    termInMonths = loanData.term * 12;
+                    break;
+            }
+            addDebugInfo(`贷款期限: ${termInMonths} 个月`);
+            
+            // 月利率
+            const monthlyRate = loanData.annualRate / 100 / 12;
+            addDebugInfo(`月利率: ${(monthlyRate * 100).toFixed(4)}%`);
+            
+            // 生成还款日期列表
+            let paymentDates = [];
+            let adjustedTerm = termInMonths;
+            
+            if (loanData.repaymentMethod !== 'daily-interest' && loanData.repaymentMethod !== 'interest-at-maturity') {
+                switch (loanData.paymentFrequency) {
+                    case 'monthly':
+                        adjustedTerm = termInMonths;
+                        break;
+                    case 'quarterly':
+                        adjustedTerm = Math.ceil(termInMonths / 3);
+                        break;
+                    case 'semi-annually':
+                        adjustedTerm = Math.ceil(termInMonths / 6);
+                        break;
+                    case 'annually':
+                        adjustedTerm = Math.ceil(termInMonths / 12);
+                        break;
+                }
+                
+                paymentDates = generatePaymentDates(loanData.firstPaymentDate, adjustedTerm, loanData.paymentFrequency);
+            }
+            
+            // 根据选择的还款方式进行计算
+            addDebugInfo(`选择的还款方式: ${loanData.repaymentMethod}`);
+            
+            switch (loanData.repaymentMethod) {
+                case 'equal-principal-interest':
+                    calculationResults[loanData.repaymentMethod] = calculateEqualPrincipalInterest(
+                        principal, 
+                        adjustedTerm, 
+                        monthlyRate, 
+                        paymentDates,
+                        loanData.paymentFrequency
+                    );
+                    break;
+                default:
+                    addDebugInfo(`⚠️  暂不支持的还款方式: ${loanData.repaymentMethod}`);
+                    return;
+            }
+            
+            addDebugInfo('✅ 计算完成，准备更新UI');
+            updateResultsUI();
+        }
+        
+        function updateResultsUI() {
+            addDebugInfo('🔄 开始执行 updateResultsUI 函数');
+            
+            if (Object.keys(calculationResults).length === 0) {
+                addDebugInfo('❌ 没有计算结果，无法更新UI');
+                return;
+            }
+            
+            const result = Object.values(calculationResults)[0];
+            addDebugInfo(`更新UI: ${result.method} - 总还款额: ${result.totalPayment.toFixed(2)}`);
+            
+            addDebugInfo('✅ UI更新完成');
+        }
+        
+        // 绑定测试按钮事件
+        document.getElementById('test-calculate').addEventListener('click', function() {
+            addDebugInfo('====================================');
+            addDebugInfo('🧪 测试 calculateLoan 函数');
+            calculateLoan();
+        });
+        
+        document.getElementById('test-validate').addEventListener('click', function() {
+            addDebugInfo('====================================');
+            addDebugInfo('🧪 测试 validateInputs 函数');
+            const isValid = validateInputs();
+            addDebugInfo(`验证结果: ${isValid ? '✅ 通过' : '❌ 失败'}`);
+        });
+        
+        document.getElementById('test-update-ui').addEventListener('click', function() {
+            addDebugInfo('====================================');
+            addDebugInfo('🧪 测试 updateResultsUI 函数');
+            updateResultsUI();
+        });
+        
+        // 页面加载时显示初始信息
+        document.addEventListener('DOMContentLoaded', function() {
+            addDebugInfo('🚀 调试模式启动');
+            addDebugInfo('📊 初始贷款数据:');
+            addDebugInfo(`- 贷款金额: ${loanData.amount} ${loanData.amountUnit}`);
+            addDebugInfo(`- 贷款期限: ${loanData.term} ${loanData.termUnit}`);
+            addDebugInfo(`- 年利率: ${loanData.annualRate}%`);
+            addDebugInfo(`- 还款方式: ${loanData.repaymentMethod}`);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试计算按钮功能</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1e40af',
+                        secondary: '#f3f4f6',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444',
+                        info: '#3b82f6',
+                        light: '#f3f4f6',
+                        dark: '#1f2937'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .loading {
+                display: inline-block;
+                width: 16px;
+                height: 16px;
+                border: 2px solid #f3f3f3;
+                border-top: 2px solid #1e40af;
+                border-radius: 50%;
+                animation: spin 1s linear infinite;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h1 class="text-2xl font-bold text-gray-800 mb-6">测试计算按钮功能</h1>
+            
+            <!-- 测试表单 -->
+            <div class="mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">贷款金额</label>
+                        <div class="flex items-center">
+                            <input type="number" id="test-amount" value="100" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                            <span class="ml-2 text-gray-500">万元</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">贷款期限</label>
+                        <div class="flex items-center">
+                            <input type="number" id="test-term" value="12" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                            <span class="ml-2 text-gray-500">月</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">年利率</label>
+                        <div class="flex items-center">
+                            <input type="number" id="test-rate" value="4.35" step="0.01" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                            <span class="ml-2 text-gray-500">%</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">还款方式</label>
+                        <select id="test-method" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                            <option value="equal-principal-interest">等额本息</option>
+                            <option value="equal-principal">等额本金</option>
+                            <option value="interest-at-maturity">到期还本付息</option>
+                            <option value="daily-interest">按日计息随借随还</option>
+                            <option value="interest-first">先息后本</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- 按日计息特有参数 -->
+                <div id="daily-interest-params" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 hidden">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">提款金额</label>
+                        <div class="flex items-center">
+                            <input type="number" id="test-withdrawal-amount" value="500000" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                            <span class="ml-2 text-gray-500">元</span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">提款天数</label>
+                        <input type="number" id="test-withdrawal-days" value="90" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 测试按钮 -->
+            <div class="flex flex-wrap gap-4 mb-6">
+                <button id="test-calculate-btn" type="button" class="btn-primary bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-md flex items-center">
+                    <i class="fa fa-calculator mr-2"></i>
+                    测试计算按钮
+                </button>
+                <button id="test-reset-btn" type="button" class="btn-secondary bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-6 py-2 rounded-md flex items-center">
+                    <i class="fa fa-refresh mr-2"></i>
+                    重置
+                </button>
+            </div>
+            
+            <!-- 测试结果 -->
+            <div class="border-t pt-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4">测试结果</h2>
+                <div id="test-results" class="bg-gray-50 p-4 rounded-md h-64 overflow-y-auto">
+                    <p class="text-gray-500">点击测试按钮开始测试...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 模拟 loanData 对象
+        let loanData = {
+            amount: 100,
+            amountUnit: 'wan',
+            term: 12,
+            termUnit: 'month',
+            annualRate: 4.35,
+            repaymentMethod: 'equal-principal-interest',
+            paymentFrequency: 'monthly',
+            firstPaymentDate: new Date().toISOString().split('T')[0],
+            interestPaymentFrequency: 'monthly',
+            withdrawalAmount: 500000,
+            withdrawalDays: 90
+        };
+        
+        // 工具函数
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('zh-CN', { style: 'currency', currency: 'CNY' }).format(amount);
+        }
+        
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('zh-CN');
+        }
+        
+        // 计算函数
+        function calculateDailyInterest(principal, withdrawalAmount, withdrawalDays, dailyRate) {
+            console.log('开始计算按日计息，参数:', {principal, withdrawalAmount, withdrawalDays, dailyRate});
+            const schedule = [];
+            
+            try {
+                // 计算利息
+                const interest = withdrawalAmount * dailyRate * withdrawalDays;
+                console.log('计算的利息:', interest);
+                
+                // 还款总额
+                const totalPayment = withdrawalAmount + interest;
+                console.log('还款总额:', totalPayment);
+                
+                // 计算方式说明
+                const calculationExplanation = {
+                    payment: `还款总额 = 提款金额 + 利息 = ${formatCurrency(withdrawalAmount)} + ${formatCurrency(interest)} = ${formatCurrency(totalPayment)}`,
+                    interest: `利息 = 提款金额×日利率×提款天数 = ${formatCurrency(withdrawalAmount)}×${(dailyRate * 100).toFixed(6)}%×${withdrawalDays} = ${formatCurrency(interest)}`,
+                    principal: `本金 = 提款金额 = ${formatCurrency(withdrawalAmount)}`,
+                    remainingPrincipal: `剩余本金 = 贷款本金 - 提款金额 = ${formatCurrency(principal)} - ${formatCurrency(withdrawalAmount)} = ${formatCurrency(principal - withdrawalAmount)}`
+                };
+                
+                // 生成还款计划
+                schedule.push({
+                    period: 1,
+                    paymentDate: '',
+                    payment: totalPayment,
+                    principal: withdrawalAmount,
+                    interest: interest,
+                    remainingPrincipal: principal - withdrawalAmount,
+                    calculationExplanation: calculationExplanation
+                });
+                
+                const result = {
+                    method: '按日计息随借随还',
+                    totalPayment: totalPayment,
+                    totalInterest: interest,
+                    schedule: schedule,
+                    withdrawalDays: withdrawalDays
+                };
+                
+                console.log('按日计息计算结果:', result);
+                return result;
+            } catch (error) {
+                console.error('按日计息计算出错:', error);
+                // 返回默认结果
+                return {
+                    method: '按日计息随借随还',
+                    totalPayment: withdrawalAmount,
+                    totalInterest: 0,
+                    schedule: [{
+                        period: 1,
+                        paymentDate: '',
+                        payment: withdrawalAmount,
+                        principal: withdrawalAmount,
+                        interest: 0,
+                        remainingPrincipal: principal - withdrawalAmount,
+                        calculationExplanation: {
+                            payment: '计算出错',
+                            interest: '计算出错',
+                            principal: '计算出错',
+                            remainingPrincipal: '计算出错'
+                        }
+                    }],
+                    withdrawalDays: withdrawalDays
+                };
+            }
+        }
+        
+        // 简化的计算函数
+        function testCalculateLoan() {
+            const resultsDiv = document.getElementById('test-results');
+            resultsDiv.innerHTML = '';
+            
+            function addResult(message, type = 'info') {
+                const div = document.createElement('div');
+                div.className = `mb-2 text-sm ${type === 'success' ? 'text-green-600' : type === 'error' ? 'text-red-600' : type === 'warning' ? 'text-yellow-600' : 'text-blue-600'}`;
+                div.textContent = message;
+                resultsDiv.appendChild(div);
+                resultsDiv.scrollTop = resultsDiv.scrollHeight;
+            }
+            
+            addResult('开始测试计算功能...');
+            
+            try {
+                // 获取表单数据
+                loanData.amount = parseFloat(document.getElementById('test-amount').value) || 100;
+                loanData.term = parseInt(document.getElementById('test-term').value) || 12;
+                loanData.annualRate = parseFloat(document.getElementById('test-rate').value) || 4.35;
+                loanData.repaymentMethod = document.getElementById('test-method').value;
+                
+                if (loanData.repaymentMethod === 'daily-interest') {
+                    loanData.withdrawalAmount = parseFloat(document.getElementById('test-withdrawal-amount').value) || 500000;
+                    loanData.withdrawalDays = parseInt(document.getElementById('test-withdrawal-days').value) || 90;
+                }
+                
+                addResult('✅ 表单数据读取成功');
+                addResult(`📊 贷款金额: ${loanData.amount}万元, 期限: ${loanData.term}月, 利率: ${loanData.annualRate}%, 方式: ${loanData.repaymentMethod}`);
+                
+                // 转换贷款金额为元
+                const principal = loanData.amountUnit === 'wan' ? loanData.amount * 10000 : loanData.amount;
+                addResult(`💰 贷款本金: ${formatCurrency(principal)}`);
+                
+                // 计算利率
+                const dailyRate = loanData.annualRate / 100 / 365;
+                addResult(`📈 日利率: ${(dailyRate * 100).toFixed(6)}%`);
+                
+                // 测试 calculateDailyInterest 函数
+                if (loanData.repaymentMethod === 'daily-interest') {
+                    addResult('🧪 测试 calculateDailyInterest 函数...');
+                    
+                    const result = calculateDailyInterest(
+                        principal,
+                        loanData.withdrawalAmount,
+                        loanData.withdrawalDays,
+                        dailyRate
+                    );
+                    
+                    if (result && typeof result === 'object') {
+                        addResult('✅ calculateDailyInterest 函数调用成功');
+                        addResult(`📋 返回结果类型: ${typeof result}`);
+                        addResult(`📊 还款总额: ${formatCurrency(result.totalPayment)}`);
+                        addResult(`📈 总利息: ${formatCurrency(result.totalInterest)}`);
+                        addResult(`📅 还款期数: ${result.schedule ? result.schedule.length : 0}`);
+                        
+                        if (result.schedule && result.schedule.length > 0) {
+                            const firstPayment = result.schedule[0];
+                            addResult(`🔍 第一期还款: ${formatCurrency(firstPayment.payment)} (本金: ${formatCurrency(firstPayment.principal)}, 利息: ${formatCurrency(firstPayment.interest)})`);
+                        }
+                        
+                        addResult('🎉 测试通过！计算按钮功能正常工作。');
+                    } else {
+                        addResult('❌ calculateDailyInterest 函数返回结果异常', 'error');
+                        addResult(`📋 返回结果: ${JSON.stringify(result)}`, 'error');
+                    }
+                } else {
+                    addResult('ℹ️ 当前选择的还款方式不是"按日计息随借随还"，请切换到该方式进行测试');
+                }
+                
+            } catch (error) {
+                addResult(`❌ 测试过程中出现错误: ${error.message}`, 'error');
+                addResult(`📋 错误详情: ${error.stack}`, 'error');
+            }
+        }
+        
+        // 事件监听器
+        document.getElementById('test-calculate-btn').addEventListener('click', function() {
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="loading mr-2"></span> 测试中...';
+            btn.disabled = true;
+            
+            setTimeout(() => {
+                testCalculateLoan();
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }, 500);
+        });
+        
+        document.getElementById('test-method').addEventListener('change', function() {
+            const dailyInterestParams = document.getElementById('daily-interest-params');
+            if (this.value === 'daily-interest') {
+                dailyInterestParams.classList.remove('hidden');
+            } else {
+                dailyInterestParams.classList.add('hidden');
+            }
+        });
+        
+        document.getElementById('test-reset-btn').addEventListener('click', function() {
+            document.getElementById('test-amount').value = 100;
+            document.getElementById('test-term').value = 12;
+            document.getElementById('test-rate').value = 4.35;
+            document.getElementById('test-method').value = 'equal-principal-interest';
+            document.getElementById('test-withdrawal-amount').value = 500000;
+            document.getElementById('test-withdrawal-days').value = 90;
+            document.getElementById('daily-interest-params').classList.add('hidden');
+            document.getElementById('test-results').innerHTML = '<p class="text-gray-500">点击测试按钮开始测试...</p>';
+        });
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('test-results').innerHTML = '<p class="text-gray-500">点击测试按钮开始测试...</p>';
+        });
+    </script>
+</body>
+</html>

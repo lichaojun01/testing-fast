@@ -1,0 +1,1206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>银行内部信贷利率计算器</title>
+    <!-- Tailwind CSS v3 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <!-- 统一的 Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1a56db',
+                        secondary: '#4b5563',
+                        accent: '#0ea5e9',
+                        neutral: '#f3f4f6',
+                        'neutral-dark': '#9ca3af',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        card: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+                    }
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .transition-height {
+                transition: max-height 0.3s ease-in-out;
+            }
+            .table-fixed-layout {
+                table-layout: fixed;
+            }
+            .text-balance {
+                text-wrap: balance;
+            }
+        }
+    </style>
+    <style>
+        /* 自定义滚动条样式 */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a1a1a1;
+        }
+        
+        /* 平滑滚动 */
+        html {
+            scroll-behavior: smooth;
+        }
+        
+        /* 表格展开/折叠动画 */
+        .table-container {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out;
+        }
+        .table-container.expanded {
+            max-height: 800px; /* 可根据需要调整 */
+        }
+        
+        /* 输入框聚焦效果 */
+        .form-input:focus {
+            box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.2);
+        }
+        
+        /* 加载动画 */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(26, 86, 219, 0.3);
+            border-radius: 50%;
+            border-top-color: #1a56db;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        /* 隐藏列的样式 */
+        .hidden-column {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <div class="min-h-screen flex flex-col">
+        <!-- 顶部导航栏 -->
+        <header class="bg-primary text-white shadow-md">
+            <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+                <div class="flex items-center space-x-2">
+                    <i class="fa fa-bank text-2xl"></i>
+                    <h1 class="text-xl font-bold">银行内部信贷利率计算器</h1>
+                </div>
+                <div class="text-sm">
+                    <span id="current-date-time"></span>
+                </div>
+            </div>
+        </header>
+
+        <!-- 主内容区 -->
+        <main class="flex-grow container mx-auto px-4 py-6">
+            <!-- 输入表单卡片 -->
+            <div class="bg-white rounded-lg shadow-card p-6 mb-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <i class="fa fa-calculator mr-2 text-primary"></i>
+                    借贷参数设置
+                </h2>
+                <form id="loan-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- 贷款金额 -->
+                    <div class="space-y-2">
+                        <label for="loan-amount" class="block text-sm font-medium text-gray-700">贷款金额</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="number" id="loan-amount" name="loan-amount" min="1000" max="100000000" step="1000" value="100000" 
+                                class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
+                                required>
+                            <select id="amount-unit" name="amount-unit" class="form-select rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                <option value="yuan">元</option>
+                                <option value="wan">万元</option>
+                            </select>
+                        </div>
+                        <p class="text-xs text-gray-500">请输入贷款金额，范围：1,000 - 100,000,000</p>
+                    </div>
+
+                    <!-- 贷款期限 -->
+                    <div class="space-y-2">
+                        <label for="loan-term" class="block text-sm font-medium text-gray-700">贷款期限</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="number" id="loan-term" name="loan-term" min="1" max="360" step="1" value="12" 
+                                class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
+                                required>
+                            <select id="term-unit" name="term-unit" class="form-select rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                <option value="month">月</option>
+                                <option value="year">年</option>
+                                <option value="day">日</option>
+                            </select>
+                        </div>
+                        <p class="text-xs text-gray-500">请输入贷款期限，按月/年/日计算</p>
+                    </div>
+
+                    <!-- 年利率 -->
+                    <div class="space-y-2">
+                        <label for="annual-rate" class="block text-sm font-medium text-gray-700">年利率 (%)</label>
+                        <input type="number" id="annual-rate" name="annual-rate" min="0.1" max="36" step="0.01" value="4.35" 
+                            class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
+                            required>
+                        <p class="text-xs text-gray-500">请输入年利率，范围：0.1% - 36%</p>
+                    </div>
+
+                    <!-- 新增：借款日期 -->
+                    <div class="space-y-2">
+                        <label for="loan-date" class="block text-sm font-medium text-gray-700">借款日期</label>
+                        <input type="date" id="loan-date" name="loan-date" 
+                            class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50"
+                            required>
+                        <p class="text-xs text-gray-500">选择借款起始日期，将据此计算每期还款日</p>
+                    </div>
+
+                    <!-- 新增：罚息和复利设置 -->
+                    <div class="space-y-2 md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700">罚息与复利设置</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label for="penalty-rate" class="block text-sm font-medium text-gray-700">罚息日利率 (‰)</label>
+                                <input type="number" id="penalty-rate" name="penalty-rate" min="0" max="10" step="0.1" value="0.5" 
+                                    class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                <p class="text-xs text-gray-500">默认0.5‰（万分之五），逾期按日计算</p>
+                            </div>
+                            <div>
+                                <label for="compound-rate" class="block text-sm font-medium text-gray-700">复利月利率 (%)</label>
+                                <input type="number" id="compound-rate" name="compound-rate" min="0" max="5" step="0.01" value="0.36" 
+                                    class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                <p class="text-xs text-gray-500">默认0.36%，对逾期利息计收复利</p>
+                            </div>
+                            <div>
+                                <label for="overdue-days" class="block text-sm font-medium text-gray-700">逾期天数</label>
+                                <input type="number" id="overdue-days" name="overdue-days" min="0" max="365" step="1" value="0" 
+                                    class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                <p class="text-xs text-gray-500">填写0表示无逾期，不计算罚息复利</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 还款方式 -->
+                    <div class="space-y-2 md:col-span-2 lg:col-span-3">
+                        <label class="block text-sm font-medium text-gray-700">还款方式</label>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                            <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="repayment-method" value="equal-principal-interest" class="form-radio h-4 w-4 text-primary" checked>
+                                <span class="ml-2 text-sm">等额本息</span>
+                            </label>
+                            <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="repayment-method" value="equal-principal" class="form-radio h-4 w-4 text-primary">
+                                <span class="ml-2 text-sm">等额本金</span>
+                            </label>
+                            <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="repayment-method" value="interest-at-maturity" class="form-radio h-4 w-4 text-primary">
+                                <span class="ml-2 text-sm">到期还本付息</span>
+                            </label>
+                            <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="repayment-method" value="daily-interest" class="form-radio h-4 w-4 text-primary">
+                                <span class="ml-2 text-sm">按日计息随借随还</span>
+                            </label>
+                            <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                                <input type="radio" name="repayment-method" value="interest-first" class="form-radio h-4 w-4 text-primary">
+                                <span class="ml-2 text-sm">先息后本</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- 还款日期设置 -->
+                    <div id="payment-date-params" class="space-y-2 md:col-span-2 lg:col-span-3">
+                        <label class="block text-sm font-medium text-gray-700">还款日期设置</label>
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label for="repayment-date-type" class="block text-sm font-medium text-gray-700">还款日类型</label>
+                                <select id="repayment-date-type" name="repayment-date-type" class="form-select rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                    <option value="follow-loan-date">按借款日期顺延</option>
+                                    <option value="fixed-date">固定日期还款</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="fixed-repayment-day" class="block text-sm font-medium text-gray-700">固定还款日</label>
+                                <input type="number" id="fixed-repayment-day" name="fixed-repayment-day" min="1" max="31" step="1" value="20" 
+                                    class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                <p class="text-xs text-gray-500">每月固定还款日期（1-31）</p>
+                            </div>
+                            <div>
+                                <label for="payment-frequency" class="block text-sm font-medium text-gray-700">还款频率</label>
+                                <select id="payment-frequency" name="payment-frequency" class="form-select rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                    <option value="monthly">每月</option>
+                                    <option value="quarterly">每季度</option>
+                                    <option value="semi-annually">每半年</option>
+                                    <option value="annually">每年</option>
+                                </select>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-500">固定日期还款时，若当月无对应日期（如2月30日），自动调整为当月最后一天</p>
+                    </div>
+                    
+                    <!-- 特殊还款方式参数 -->
+                    <div id="special-method-params" class="space-y-2 md:col-span-2 lg:col-span-3 hidden">
+                        <!-- 按日计息参数 -->
+                        <div id="daily-interest-params-content" class="space-y-2 hidden">
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label for="withdrawal-amount" class="block text-sm font-medium text-gray-700">提款金额</label>
+                                    <div class="flex items-center space-x-2">
+                                        <input type="number" id="withdrawal-amount" name="withdrawal-amount" min="0" step="1000" value="50000" 
+                                            class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                        <span class="text-sm text-gray-500">元</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label for="withdrawal-days" class="block text-sm font-medium text-gray-700">提款天数</label>
+                                    <input type="number" id="withdrawal-days" name="withdrawal-days" min="1" max="365" value="30" 
+                                        class="form-input w-full rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-500">按日计息模式下，可模拟部分提款场景</p>
+                        </div>
+                        
+                        <!-- 先息后本参数 -->
+                        <div id="interest-first-params-content" class="space-y-2 hidden">
+                            <div>
+                                <label for="interest-payment-frequency" class="block text-sm font-medium text-gray-700">利息支付频率</label>
+                                <select id="interest-payment-frequency" name="interest-payment-frequency" class="form-select rounded-md border-gray-300 shadow-sm focus:border-primary focus:ring focus:ring-primary focus:ring-opacity-50">
+                                    <option value="monthly">每月</option>
+                                    <option value="quarterly">每季度</option>
+                                    <option value="semi-annually">每半年</option>
+                                    <option value="annually">每年</option>
+                                </select>
+                            </div>
+                            <p class="text-xs text-gray-500">先息后本模式下，每期仅支付利息，到期一次性归还本金</p>
+                        </div>
+                    </div>
+                </form>
+
+                <!-- 操作按钮 -->
+                <div class="mt-6 flex flex-wrap gap-3">
+                    <button id="calculate-btn" type="button" class="btn-primary bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-md flex items-center">
+                        <i class="fa fa-calculator mr-2"></i>
+                        计算还款计划
+                    </button>
+                    <button id="reset-btn" type="button" class="btn-secondary bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-6 py-2 rounded-md flex items-center">
+                        <i class="fa fa-refresh mr-2"></i>
+                        重置
+                    </button>
+                    <button id="export-btn" type="button" class="btn-secondary bg-white border border-gray-300 shadow-sm hover:bg-gray-50 text-gray-700 px-6 py-2 rounded-md flex items-center">
+                        <i class="fa fa-download mr-2"></i>
+                        导出结果
+                    </button>
+                </div>
+            </div>
+
+            <!-- 计算结果区 -->
+            <div id="results-section" class="space-y-6">
+                <!-- 结果摘要卡片 -->
+                <div class="bg-white rounded-lg shadow-card p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fa fa-bar-chart mr-2 text-primary"></i>
+                        还款计划摘要
+                    </h2>
+                    <div id="summary-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <!-- 摘要数据将通过JS动态生成 -->
+                    </div>
+                </div>
+
+                <!-- 图表比较 -->
+                <div class="bg-white rounded-lg shadow-card p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fa fa-pie-chart mr-2 text-primary"></i>
+                        还款方式对比
+                    </h2>
+                    <div class="h-80">
+                        <canvas id="comparison-chart"></canvas>
+                    </div>
+                </div>
+
+                <!-- 详细还款计划 -->
+                <div id="detailed-results" class="space-y-6">
+                    <div class="bg-white rounded-lg shadow-card p-6">
+                        <div class="flex justify-between items-center mb-4">
+                            <h2 class="text-lg font-semibold text-gray-800 flex items-center">
+                                <i class="fa fa-list-alt mr-2 text-primary"></i>
+                                详细还款计划
+                            </h2>
+                            <button id="toggle-table" class="text-primary hover:text-primary/80 text-sm flex items-center">
+                                <i class="fa fa-chevron-down mr-1"></i>
+                                展开/收起
+                            </button>
+                        </div>
+                        <div class="table-container expanded overflow-x-auto">
+                            <table class="min-w-full divide-y divide-gray-200 table-fixed-layout">
+                                <thead class="bg-gray-50">
+                                    <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-12">期数</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">借款日</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">还款日</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">还款金额</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">本金</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">利息</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">剩余本金</th>
+                                        <th id="penalty-header" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24 hidden-column">罚息</th>
+                                        <th id="compound-header" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24 hidden-column">复利</th>
+                                        <th id="total-with-penalty-header" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24 hidden-column">总还款额(含罚复)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="repayment-table-body" class="bg-white divide-y divide-gray-200">
+                                    <!-- 详细还款数据将通过JS动态生成 -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 计算方式说明 -->
+                <div class="bg-white rounded-lg shadow-card p-6">
+                    <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                        <i class="fa fa-info-circle mr-2 text-primary"></i>
+                        计算方式说明
+                    </h2>
+                    <div id="calculation-method-explanation" class="space-y-4 text-sm text-gray-700">
+                        <!-- 计算方式说明将通过JS动态生成 -->
+                        <p class="text-center text-gray-500">请选择还款方式并点击计算按钮查看计算方式说明</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 辅助信息区 -->
+        <aside class="container mx-auto px-4 py-6">
+            <div class="bg-white rounded-lg shadow-card p-6 mb-6">
+                <h2 class="text-lg font-semibold text-gray-800 mb-4 flex items-center">
+                    <i class="fa fa-info-circle mr-2 text-primary"></i>
+                    借贷方式说明
+                </h2>
+                <div class="space-y-4 text-sm text-gray-700">
+                    <div>
+                        <h3 class="font-medium text-primary">等额本息</h3>
+                        <p>每月还款金额相同，前期还款中利息占比较大，本金占比较小，适合收入稳定的借款人。</p>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-primary">等额本金</h3>
+                        <p>每月还款本金相同，利息逐月递减，总利息较等额本息少，但前期还款压力较大。</p>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-primary">到期还本付息</h3>
+                        <p>贷款期满后一次性归还本金和利息，适合短期贷款或有一次性还款能力的客户。</p>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-primary">按日计息随借随还</h3>
+                        <p>根据实际使用天数计算利息，可随时还款，适合资金使用灵活的客户。</p>
+                    </div>
+                    <div>
+                        <h3 class="font-medium text-primary">罚息与复利</h3>
+                        <p>罚息：逾期还款时，按逾期本金×罚息日利率×逾期天数计算；复利：对逾期未付的利息，按复利月利率计算利息。</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 页脚 -->
+        <footer class="bg-gray-800 text-white py-6">
+            <div class="container mx-auto px-4">
+                <div class="flex flex-col md:flex-row justify-between items-center">
+                    <div class="mb-4 md:mb-0">
+                        <p class="text-sm">&copy; 2025 银行内部系统. 保留所有权利.</p>
+                    </div>
+                    <div class="text-sm">
+                        <p>版本 1.0.0 | 仅供银行内部使用</p>
+                    </div>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <!-- 导出结果模态框 -->
+    <div id="export-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-800">导出计算结果</h3>
+                <button id="close-modal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">选择导出格式</label>
+                    <div class="grid grid-cols-2 gap-3">
+                        <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                            <input type="radio" name="export-format" value="excel" class="form-radio h-4 w-4 text-primary" checked>
+                            <span class="ml-2 text-sm">Excel (.xlsx)</span>
+                        </label>
+                        <label class="flex items-center p-3 border rounded-md cursor-pointer hover:bg-gray-50">
+                            <input type="radio" name="export-format" value="pdf" class="form-radio h-4 w-4 text-primary">
+                            <span class="ml-2 text-sm">PDF (.pdf)</span>
+                        </label>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">选择导出内容</label>
+                    <div class="space-y-2">
+                        <label class="flex items-center">
+                            <input type="checkbox" name="export-content" value="summary" class="form-checkbox h-4 w-4 text-primary" checked>
+                            <span class="ml-2 text-sm">还款计划摘要</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="export-content" value="details" class="form-checkbox h-4 w-4 text-primary" checked>
+                            <span class="ml-2 text-sm">详细还款计划</span>
+                        </label>
+                        <label class="flex items-center">
+                            <input type="checkbox" name="export-content" value="calculation-methods" class="form-checkbox h-4 w-4 text-primary" checked>
+                            <span class="ml-2 text-sm">计算方式说明</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="pt-4 flex justify-end">
+                    <button id="cancel-export" class="btn-secondary bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-md mr-3">
+                        取消
+                    </button>
+                    <button id="confirm-export" class="btn-primary bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-md flex items-center">
+                        <i class="fa fa-download mr-2"></i>
+                        确认导出
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 计算方式详情模态框 -->
+    <div id="calculation-detail-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-semibold text-gray-800" id="calculation-detail-title">计算方式详情</h3>
+                <button id="close-calculation-detail" class="text-gray-500 hover:text-gray-700">
+                    <i class="fa fa-times"></i>
+                </button>
+            </div>
+            <div id="calculation-detail-content" class="space-y-4 text-sm text-gray-700">
+                <!-- 计算方式详情将通过JS动态生成 -->
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button id="close-calculation-detail-btn" class="btn-secondary bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-md">
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        // 初始化当前日期时间
+        function updateDateTime() {
+            const now = new Date();
+            const options = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+            document.getElementById('current-date-time').textContent = now.toLocaleString('zh-CN', options);
+        }
+        setInterval(updateDateTime, 1000);
+        updateDateTime();
+
+        // 设置借款日期默认值为今天
+        document.getElementById('loan-date').value = new Date().toISOString().split('T')[0];
+
+        // 还款方式切换显示对应参数
+        const repaymentMethods = document.querySelectorAll('input[name="repayment-method"]');
+        const specialParams = document.getElementById('special-method-params');
+        const dailyInterestParams = document.getElementById('daily-interest-params-content');
+        const interestFirstParams = document.getElementById('interest-first-params-content');
+
+        repaymentMethods.forEach(method => {
+            method.addEventListener('change', function() {
+                specialParams.classList.add('hidden');
+                dailyInterestParams.classList.add('hidden');
+                interestFirstParams.classList.add('hidden');
+                
+                if (this.value === 'daily-interest') {
+                    specialParams.classList.remove('hidden');
+                    dailyInterestParams.classList.remove('hidden');
+                } else if (this.value === 'interest-first') {
+                    specialParams.classList.remove('hidden');
+                    interestFirstParams.classList.remove('hidden');
+                }
+            });
+        });
+
+        // 计算还款日 - 新增固定还款日逻辑
+        function calculateRepaymentDate(loanDate, term, frequency = 'monthly') {
+            // 获取还款日类型和固定还款日
+            const repaymentDateType = document.getElementById('repayment-date-type').value;
+            const fixedRepaymentDay = parseInt(document.getElementById('fixed-repayment-day').value) || 20;
+            
+            const date = new Date(loanDate);
+            const loanDay = date.getDate();
+            
+            // 根据还款频率计算期数间隔
+            switch(frequency) {
+                case 'monthly':
+                    date.setMonth(date.getMonth() + term);
+                    break;
+                case 'quarterly':
+                    date.setMonth(date.getMonth() + term * 3);
+                    break;
+                case 'semi-annually':
+                    date.setMonth(date.getMonth() + term * 6);
+                    break;
+                case 'annually':
+                    date.setFullYear(date.getFullYear() + term);
+                    break;
+            }
+            
+            // 如果是固定日期还款
+            if (repaymentDateType === 'fixed-date') {
+                // 获取当月最后一天
+                const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+                // 设置为固定日期（如果超过当月最大天数，则取最后一天）
+                date.setDate(Math.min(fixedRepaymentDay, lastDayOfMonth));
+            } else {
+                // 按借款日期顺延的原有逻辑
+                const lastDayOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+                date.setDate(Math.min(loanDay, lastDayOfMonth));
+            }
+            
+            return date.toISOString().split('T')[0];
+        }
+
+        // 计算罚息和复利
+        function calculatePenaltyAndCompound(principal, interest, overdueDays, penaltyRate, compoundRate) {
+            // 只有逾期天数大于0时才计算罚息和复利
+            if (overdueDays <= 0) {
+                return {
+                    penalty: 0,
+                    compound: 0
+                };
+            }
+            
+            // 罚息 = 逾期本金 × 罚息日利率(‰) × 逾期天数 / 1000
+            const penalty = (principal * penaltyRate * overdueDays) / 1000;
+            // 复利 = 逾期利息 × 复利月利率(%) × (逾期天数/30) / 100
+            const compound = (interest * compoundRate * (overdueDays / 30)) / 100;
+            
+            return {
+                penalty: parseFloat(penalty.toFixed(2)),
+                compound: parseFloat(compound.toFixed(2))
+            };
+        }
+
+        // 等额本息计算
+        function calculateEqualPrincipalInterest(principal, annualRate, months, loanDate, paymentFrequency, penaltyRate, compoundRate, overdueDays) {
+            const monthlyRate = annualRate / 100 / 12;
+            const monthlyPayment = principal * monthlyRate * Math.pow(1 + monthlyRate, months) / (Math.pow(1 + monthlyRate, months) - 1);
+            
+            let remainingPrincipal = principal;
+            const repaymentPlan = [];
+            
+            for (let i = 1; i <= months; i++) {
+                const interest = remainingPrincipal * monthlyRate;
+                const principalPayment = monthlyPayment - interest;
+                remainingPrincipal = Math.max(0, remainingPrincipal - principalPayment);
+                
+                // 计算还款日
+                const repaymentDate = calculateRepaymentDate(loanDate, i, paymentFrequency);
+                
+                // 只有逾期天数>0时才计算罚息和复利
+                const { penalty, compound } = calculatePenaltyAndCompound(
+                    principalPayment, 
+                    interest, 
+                    overdueDays, // 使用用户输入的逾期天数
+                    penaltyRate, 
+                    compoundRate
+                );
+                
+                const totalPayment = parseFloat((monthlyPayment + penalty + compound).toFixed(2));
+                
+                repaymentPlan.push({
+                    term: i,
+                    loanDate: loanDate,
+                    repaymentDate: repaymentDate,
+                    payment: parseFloat(monthlyPayment.toFixed(2)),
+                    principal: parseFloat(principalPayment.toFixed(2)),
+                    interest: parseFloat(interest.toFixed(2)),
+                    remainingPrincipal: parseFloat(remainingPrincipal.toFixed(2)),
+                    penalty: penalty,
+                    compound: compound,
+                    totalPayment: totalPayment,
+                    hasOverdue: overdueDays > 0
+                });
+            }
+            
+            return repaymentPlan;
+        }
+
+        // 等额本金计算
+        function calculateEqualPrincipal(principal, annualRate, months, loanDate, paymentFrequency, penaltyRate, compoundRate, overdueDays) {
+            const monthlyRate = annualRate / 100 / 12;
+            const monthlyPrincipal = principal / months;
+            
+            let remainingPrincipal = principal;
+            const repaymentPlan = [];
+            
+            for (let i = 1; i <= months; i++) {
+                const interest = remainingPrincipal * monthlyRate;
+                const monthlyPayment = monthlyPrincipal + interest;
+                remainingPrincipal = Math.max(0, remainingPrincipal - monthlyPrincipal);
+                
+                // 计算还款日
+                const repaymentDate = calculateRepaymentDate(loanDate, i, paymentFrequency);
+                
+                // 只有逾期天数>0时才计算罚息和复利
+                const { penalty, compound } = calculatePenaltyAndCompound(
+                    monthlyPrincipal, 
+                    interest, 
+                    overdueDays,
+                    penaltyRate, 
+                    compoundRate
+                );
+                
+                const totalPayment = parseFloat((monthlyPayment + penalty + compound).toFixed(2));
+                
+                repaymentPlan.push({
+                    term: i,
+                    loanDate: loanDate,
+                    repaymentDate: repaymentDate,
+                    payment: parseFloat(monthlyPayment.toFixed(2)),
+                    principal: parseFloat(monthlyPrincipal.toFixed(2)),
+                    interest: parseFloat(interest.toFixed(2)),
+                    remainingPrincipal: parseFloat(remainingPrincipal.toFixed(2)),
+                    penalty: penalty,
+                    compound: compound,
+                    totalPayment: totalPayment,
+                    hasOverdue: overdueDays > 0
+                });
+            }
+            
+            return repaymentPlan;
+        }
+
+        // 到期还本付息计算
+        function calculateInterestAtMaturity(principal, annualRate, months, loanDate, paymentFrequency, penaltyRate, compoundRate, overdueDays) {
+            const monthlyRate = annualRate / 100 / 12;
+            const totalInterest = principal * monthlyRate * months;
+            const totalPayment = principal + totalInterest;
+            
+            // 计算还款日
+            const repaymentDate = calculateRepaymentDate(loanDate, months, paymentFrequency);
+            
+            // 只有逾期天数>0时才计算罚息和复利
+            const { penalty, compound } = calculatePenaltyAndCompound(
+                principal, 
+                totalInterest, 
+                overdueDays,
+                penaltyRate, 
+                compoundRate
+            );
+            
+            const finalTotalPayment = parseFloat((totalPayment + penalty + compound).toFixed(2));
+            
+            return [{
+                term: 1,
+                loanDate: loanDate,
+                repaymentDate: repaymentDate,
+                payment: parseFloat(totalPayment.toFixed(2)),
+                principal: parseFloat(principal.toFixed(2)),
+                interest: parseFloat(totalInterest.toFixed(2)),
+                remainingPrincipal: 0,
+                penalty: penalty,
+                compound: compound,
+                totalPayment: finalTotalPayment,
+                hasOverdue: overdueDays > 0
+            }];
+        }
+
+        // 按日计息计算
+        function calculateDailyInterest(principal, annualRate, days, loanDate, withdrawalAmount, withdrawalDays, penaltyRate, compoundRate, overdueDays) {
+            const dailyRate = annualRate / 100 / 365;
+            const interest = withdrawalAmount * dailyRate * withdrawalDays;
+            const totalPayment = withdrawalAmount + interest;
+            
+            // 计算还款日
+            const repaymentDate = new Date(loanDate);
+            repaymentDate.setDate(repaymentDate.getDate() + withdrawalDays);
+            const formattedRepaymentDate = repaymentDate.toISOString().split('T')[0];
+            
+            // 只有逾期天数>0时才计算罚息和复利
+            const { penalty, compound } = calculatePenaltyAndCompound(
+                withdrawalAmount, 
+                interest, 
+                overdueDays,
+                penaltyRate, 
+                compoundRate
+            );
+            
+            const finalTotalPayment = parseFloat((totalPayment + penalty + compound).toFixed(2));
+            
+            return [{
+                term: 1,
+                loanDate: loanDate,
+                repaymentDate: formattedRepaymentDate,
+                payment: parseFloat(totalPayment.toFixed(2)),
+                principal: parseFloat(withdrawalAmount.toFixed(2)),
+                interest: parseFloat(interest.toFixed(2)),
+                remainingPrincipal: principal - withdrawalAmount,
+                penalty: penalty,
+                compound: compound,
+                totalPayment: finalTotalPayment,
+                hasOverdue: overdueDays > 0
+            }];
+        }
+
+        // 先息后本计算
+        function calculateInterestFirst(principal, annualRate, months, loanDate, paymentFrequency, penaltyRate, compoundRate, overdueDays) {
+            const monthlyRate = annualRate / 100 / 12;
+            const monthlyInterest = principal * monthlyRate;
+            
+            let remainingPrincipal = principal;
+            const repaymentPlan = [];
+            
+            // 计算利息支付期数
+            let paymentTerms = months;
+            switch(paymentFrequency) {
+                case 'monthly': paymentTerms = months; break;
+                case 'quarterly': paymentTerms = months / 3; break;
+                case 'semi-annually': paymentTerms = months / 6; break;
+                case 'annually': paymentTerms = months / 12; break;
+            }
+            
+            // 利息支付期
+            for (let i = 1; i < paymentTerms; i++) {
+                const repaymentDate = calculateRepaymentDate(loanDate, i, paymentFrequency);
+                
+                // 只有逾期天数>0时才计算罚息和复利
+                const { penalty, compound } = calculatePenaltyAndCompound(
+                    0, 
+                    monthlyInterest, 
+                    overdueDays,
+                    penaltyRate, 
+                    compoundRate
+                );
+                
+                const totalPayment = parseFloat((monthlyInterest + penalty + compound).toFixed(2));
+                
+                repaymentPlan.push({
+                    term: i,
+                    loanDate: loanDate,
+                    repaymentDate: repaymentDate,
+                    payment: parseFloat(monthlyInterest.toFixed(2)),
+                    principal: 0,
+                    interest: parseFloat(monthlyInterest.toFixed(2)),
+                    remainingPrincipal: parseFloat(remainingPrincipal.toFixed(2)),
+                    penalty: penalty,
+                    compound: compound,
+                    totalPayment: totalPayment,
+                    hasOverdue: overdueDays > 0
+                });
+            }
+            
+            // 最后一期还本付息
+            const finalRepaymentDate = calculateRepaymentDate(loanDate, months, 'monthly');
+            const finalPayment = principal + monthlyInterest;
+            
+            const { penalty, compound } = calculatePenaltyAndCompound(
+                principal, 
+                monthlyInterest, 
+                overdueDays,
+                penaltyRate, 
+                compoundRate
+            );
+            
+            const finalTotalPayment = parseFloat((finalPayment + penalty + compound).toFixed(2));
+            
+            repaymentPlan.push({
+                term: paymentTerms,
+                loanDate: loanDate,
+                repaymentDate: finalRepaymentDate,
+                payment: parseFloat(finalPayment.toFixed(2)),
+                principal: parseFloat(principal.toFixed(2)),
+                interest: parseFloat(monthlyInterest.toFixed(2)),
+                remainingPrincipal: 0,
+                penalty: penalty,
+                compound: compound,
+                totalPayment: finalTotalPayment,
+                hasOverdue: overdueDays > 0
+            });
+            
+            return repaymentPlan;
+        }
+
+        // 生成还款计划表
+        function renderRepaymentTable(plan) {
+            const tableBody = document.getElementById('repayment-table-body');
+            tableBody.innerHTML = '';
+            
+            // 判断是否有逾期
+            const hasOverdue = plan.some(item => item.hasOverdue);
+            
+            // 显示/隐藏罚息复利列
+            document.getElementById('penalty-header').classList.toggle('hidden-column', !hasOverdue);
+            document.getElementById('compound-header').classList.toggle('hidden-column', !hasOverdue);
+            document.getElementById('total-with-penalty-header').classList.toggle('hidden-column', !hasOverdue);
+            
+            plan.forEach(item => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+                
+                // 根据是否有逾期决定是否显示罚息复利列
+                let penaltyHtml = '';
+                let compoundHtml = '';
+                let totalWithPenaltyHtml = '';
+                
+                if (hasOverdue) {
+                    penaltyHtml = `<td class="px-4 py-3 whitespace-nowrap text-sm text-danger">¥${item.penalty.toLocaleString()}</td>`;
+                    compoundHtml = `<td class="px-4 py-3 whitespace-nowrap text-sm text-warning">¥${item.compound.toLocaleString()}</td>`;
+                    totalWithPenaltyHtml = `<td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-primary">¥${item.totalPayment.toLocaleString()}</td>`;
+                }
+                
+                row.innerHTML = `
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-500">${item.term}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${item.loanDate}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">${item.repaymentDate}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">¥${item.payment.toLocaleString()}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">¥${item.principal.toLocaleString()}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">¥${item.interest.toLocaleString()}</td>
+                    <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-900">¥${item.remainingPrincipal.toLocaleString()}</td>
+                    ${penaltyHtml}
+                    ${compoundHtml}
+                    ${totalWithPenaltyHtml}
+                `;
+                
+                tableBody.appendChild(row);
+            });
+        }
+
+        // 生成摘要信息
+        function renderSummary(plan, principal, totalMonths, annualRate) {
+            const summaryContainer = document.getElementById('summary-container');
+            summaryContainer.innerHTML = '';
+            
+            // 计算总还款额、总利息、总罚息、总复利
+            const totalPayment = plan.reduce((sum, item) => sum + item.payment, 0);
+            const totalInterest = plan.reduce((sum, item) => sum + item.interest, 0);
+            const totalPenalty = plan.reduce((sum, item) => sum + item.penalty, 0);
+            const totalCompound = plan.reduce((sum, item) => sum + item.compound, 0);
+            const totalAll = plan.reduce((sum, item) => sum + item.totalPayment, 0);
+            
+            const summaries = [
+                { title: '贷款本金', value: `¥${parseFloat(principal).toLocaleString()}` },
+                { title: '贷款期限', value: `${totalMonths}个月` },
+                { title: '年利率', value: `${annualRate}%` },
+                { title: '总还款额', value: `¥${totalPayment.toLocaleString()}` },
+                { title: '总利息', value: `¥${totalInterest.toLocaleString()}` }
+            ];
+            
+            // 只有有逾期时才显示罚息和复利摘要
+            if (totalPenalty > 0 || totalCompound > 0) {
+                summaries.push(
+                    { title: '总罚息', value: `¥${totalPenalty.toLocaleString()}` },
+                    { title: '总复利', value: `¥${totalCompound.toLocaleString()}` },
+                    { title: '应还总额', value: `¥${totalAll.toLocaleString()}` }
+                );
+            }
+            
+            summaries.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'bg-white p-4 rounded-lg border border-gray-200 shadow-sm';
+                
+                card.innerHTML = `
+                    <p class="text-sm text-gray-500">${item.title}</p>
+                    <p class="text-xl font-semibold text-gray-900 mt-1">${item.value}</p>
+                `;
+                
+                summaryContainer.appendChild(card);
+            });
+        }
+
+        // 生成图表
+        function renderChart(plan) {
+            const ctx = document.getElementById('comparison-chart').getContext('2d');
+            
+            // 计算本金和利息占比
+            const totalPrincipal = plan.reduce((sum, item) => sum + item.principal, 0);
+            const totalInterest = plan.reduce((sum, item) => sum + item.interest, 0);
+            const totalPenalty = plan.reduce((sum, item) => sum + item.penalty, 0);
+            const totalCompound = plan.reduce((sum, item) => sum + item.compound, 0);
+            
+            // 销毁原有图表
+            if (window.repaymentChart) {
+                window.repaymentChart.destroy();
+            }
+            
+            // 准备图表数据
+            let labels = ['本金', '利息'];
+            let data = [totalPrincipal, totalInterest];
+            let backgroundColors = ['#1a56db', '#0ea5e9'];
+            
+            // 只有有逾期时才显示罚息和复利
+            if (totalPenalty > 0) {
+                labels.push('罚息');
+                data.push(totalPenalty);
+                backgroundColors.push('#ef4444');
+            }
+            
+            if (totalCompound > 0) {
+                labels.push('复利');
+                data.push(totalCompound);
+                backgroundColors.push('#f59e0b');
+            }
+            
+            window.repaymentChart = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                    const percentage = Math.round((value / total) * 100);
+                                    return `${label}: ¥${value.toLocaleString()} (${percentage}%)`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 生成计算说明
+        function renderCalculationExplanation(method) {
+            const container = document.getElementById('calculation-method-explanation');
+            
+            const explanations = {
+                'equal-principal-interest': `
+                    <h3 class="font-medium text-primary">等额本息计算公式</h3>
+                    <p>每月还款额 = 贷款本金 × [月利率 × (1 + 月利率)ⁿ] / [(1 + 月利率)ⁿ - 1]</p>
+                    <p>其中：n = 还款月数</p>
+                    <p>每月利息 = 剩余本金 × 月利率</p>
+                    <p>每月本金 = 每月还款额 - 每月利息</p>
+                    <h3 class="font-medium text-primary mt-3">罚息计算公式（如有逾期）</h3>
+                    <p>罚息 = 逾期本金 × 罚息日利率(‰) × 逾期天数 / 1000</p>
+                    <h3 class="font-medium text-primary mt-3">复利计算公式（如有逾期）</h3>
+                    <p>复利 = 逾期利息 × 复利月利率(%) × (逾期天数/30) / 100</p>
+                `,
+                'equal-principal': `
+                    <h3 class="font-medium text-primary">等额本金计算公式</h3>
+                    <p>每月还款额 = (贷款本金 / 还款月数) + (本金 - 已归还本金累计额) × 月利率</p>
+                    <p>每月本金 = 贷款本金 / 还款月数</p>
+                    <p>每月利息 = 剩余本金 × 月利率</p>
+                    <h3 class="font-medium text-primary mt-3">罚息计算公式（如有逾期）</h3>
+                    <p>罚息 = 逾期本金 × 罚息日利率(‰) × 逾期天数 / 1000</p>
+                    <h3 class="font-medium text-primary mt-3">复利计算公式（如有逾期）</h3>
+                    <p>复利 = 逾期利息 × 复利月利率(%) × (逾期天数/30) / 100</p>
+                `,
+                'interest-at-maturity': `
+                    <h3 class="font-medium text-primary">到期还本付息计算公式</h3>
+                    <p>总利息 = 贷款本金 × 月利率 × 还款月数</p>
+                    <p>到期还款额 = 贷款本金 + 总利息</p>
+                    <h3 class="font-medium text-primary mt-3">罚息计算公式（如有逾期）</h3>
+                    <p>罚息 = 逾期本金 × 罚息日利率(‰) × 逾期天数 / 1000</p>
+                    <h3 class="font-medium text-primary mt-3">复利计算公式（如有逾期）</h3>
+                    <p>复利 = 逾期利息 × 复利月利率(%) × (逾期天数/30) / 100</p>
+                `,
+                'daily-interest': `
+                    <h3 class="font-medium text-primary">按日计息计算公式</h3>
+                    <p>日利率 = 年利率 / 365</p>
+                    <p>利息 = 提款金额 × 日利率 × 提款天数</p>
+                    <p>还款额 = 提款金额 + 利息</p>
+                    <h3 class="font-medium text-primary mt-3">罚息计算公式（如有逾期）</h3>
+                    <p>罚息 = 逾期本金 × 罚息日利率(‰) × 逾期天数 / 1000</p>
+                    <h3 class="font-medium text-primary mt-3">复利计算公式（如有逾期）</h3>
+                    <p>复利 = 逾期利息 × 复利月利率(%) × (逾期天数/30) / 100</p>
+                `,
+                'interest-first': `
+                    <h3 class="font-medium text-primary">先息后本计算公式</h3>
+                    <p>每月利息 = 贷款本金 × 月利率</p>
+                    <p>最后一期还款额 = 贷款本金 + 最后一期利息</p>
+                    <h3 class="font-medium text-primary mt-3">罚息计算公式（如有逾期）</h3>
+                    <p>罚息 = 逾期本金 × 罚息日利率(‰) × 逾期天数 / 1000</p>
+                    <h3 class="font-medium text-primary mt-3">复利计算公式（如有逾期）</h3>
+                    <p>复利 = 逾期利息 × 复利月利率(%) × (逾期天数/30) / 100</p>
+                `
+            };
+            
+            container.innerHTML = explanations[method] || '<p class="text-center text-gray-500">暂无计算说明</p>';
+        }
+
+        // 计算按钮点击事件
+        document.getElementById('calculate-btn').addEventListener('click', function() {
+            // 获取表单数据
+            const loanAmount = parseFloat(document.getElementById('loan-amount').value);
+            const amountUnit = document.getElementById('amount-unit').value;
+            const loanTerm = parseInt(document.getElementById('loan-term').value);
+            const termUnit = document.getElementById('term-unit').value;
+            const annualRate = parseFloat(document.getElementById('annual-rate').value);
+            const loanDate = document.getElementById('loan-date').value;
+            const penaltyRate = parseFloat(document.getElementById('penalty-rate').value);
+            const compoundRate = parseFloat(document.getElementById('compound-rate').value);
+            const paymentFrequency = document.getElementById('payment-frequency').value;
+            const withdrawalAmount = parseFloat(document.getElementById('withdrawal-amount').value) || 0;
+            const withdrawalDays = parseInt(document.getElementById('withdrawal-days').value) || 0;
+            const overdueDays = parseInt(document.getElementById('overdue-days').value) || 0; // 获取逾期天数
+            
+            // 处理金额单位
+            let principal = loanAmount;
+            if (amountUnit === 'wan') {
+                principal = loanAmount * 10000;
+            }
+            
+            // 处理期限单位
+            let totalMonths = loanTerm;
+            if (termUnit === 'year') {
+                totalMonths = loanTerm * 12;
+            } else if (termUnit === 'day') {
+                totalMonths = Math.ceil(loanTerm / 30);
+            }
+            
+            // 获取选中的还款方式
+            const selectedMethod = document.querySelector('input[name="repayment-method"]:checked').value;
+            
+            // 根据还款方式计算
+            let repaymentPlan = [];
+            switch(selectedMethod) {
+                case 'equal-principal-interest':
+                    repaymentPlan = calculateEqualPrincipalInterest(principal, annualRate, totalMonths, loanDate, paymentFrequency, penaltyRate, compoundRate, overdueDays);
+                    break;
+                case 'equal-principal':
+                    repaymentPlan = calculateEqualPrincipal(principal, annualRate, totalMonths, loanDate, paymentFrequency, penaltyRate, compoundRate, overdueDays);
+                    break;
+                case 'interest-at-maturity':
+                    repaymentPlan = calculateInterestAtMaturity(principal, annualRate, totalMonths, loanDate, paymentFrequency, penaltyRate, compoundRate, overdueDays);
+                    break;
+                case 'daily-interest':
+                    repaymentPlan = calculateDailyInterest(principal, annualRate, loanTerm, loanDate, withdrawalAmount, withdrawalDays, penaltyRate, compoundRate, overdueDays);
+                    break;
+                case 'interest-first':
+                    repaymentPlan = calculateInterestFirst(principal, annualRate, totalMonths, loanDate, paymentFrequency, penaltyRate, compoundRate, overdueDays);
+                    break;
+            }
+            
+            // 渲染结果
+            renderRepaymentTable(repaymentPlan);
+            renderSummary(repaymentPlan, principal, totalMonths, annualRate);
+            renderChart(repaymentPlan);
+            renderCalculationExplanation(selectedMethod);
+            
+            // 显示结果区域
+            document.getElementById('results-section').scrollIntoView({ behavior: 'smooth' });
+        });
+
+        // 重置按钮点击事件
+        document.getElementById('reset-btn').addEventListener('click', function() {
+            document.getElementById('loan-form').reset();
+            document.getElementById('loan-amount').value = 100000;
+            document.getElementById('loan-term').value = 12;
+            document.getElementById('annual-rate').value = 4.35;
+            document.getElementById('loan-date').value = new Date().toISOString().split('T')[0];
+            document.getElementById('penalty-rate').value = 0.5;
+            document.getElementById('compound-rate').value = 0.36;
+            document.getElementById('overdue-days').value = 0; // 重置逾期天数
+            document.getElementById('fixed-repayment-day').value = 20;
+            document.getElementById('withdrawal-amount').value = 50000;
+            document.getElementById('withdrawal-days').value = 30;
+            
+            // 重置选中的还款方式
+            document.querySelector('input[name="repayment-method"][value="equal-principal-interest"]').checked = true;
+            
+            // 隐藏罚息复利列
+            document.getElementById('penalty-header').classList.add('hidden-column');
+            document.getElementById('compound-header').classList.add('hidden-column');
+            document.getElementById('total-with-penalty-header').classList.add('hidden-column');
+            
+            // 清空结果
+            document.getElementById('summary-container').innerHTML = '';
+            document.getElementById('repayment-table-body').innerHTML = '';
+            document.getElementById('calculation-method-explanation').innerHTML = '<p class="text-center text-gray-500">请选择还款方式并点击计算按钮查看计算方式说明</p>';
+            
+            // 销毁图表
+            if (window.repaymentChart) {
+                window.repaymentChart.destroy();
+                window.repaymentChart = null;
+            }
+        });
+
+        // 导出按钮点击事件
+        document.getElementById('export-btn').addEventListener('click', function() {
+            document.getElementById('export-modal').classList.remove('hidden');
+        });
+
+        // 关闭模态框
+        document.getElementById('close-modal').addEventListener('click', function() {
+            document.getElementById('export-modal').classList.add('hidden');
+        });
+
+        document.getElementById('cancel-export').addEventListener('click', function() {
+            document.getElementById('export-modal').classList.add('hidden');
+        });
+
+        // 表格展开/收起
+        document.getElementById('toggle-table').addEventListener('click', function() {
+            const tableContainer = document.querySelector('.table-container');
+            tableContainer.classList.toggle('expanded');
+            
+            const icon = this.querySelector('i');
+            if (tableContainer.classList.contains('expanded')) {
+                icon.className = 'fa fa-chevron-down mr-1';
+            } else {
+                icon.className = 'fa fa-chevron-up mr-1';
+            }
+        });
+
+        // 关闭计算详情模态框
+        document.getElementById('close-calculation-detail').addEventListener('click', function() {
+            document.getElementById('calculation-detail-modal').classList.add('hidden');
+        });
+
+        document.getElementById('close-calculation-detail-btn').addEventListener('click', function() {
+            document.getElementById('calculation-detail-modal').classList.add('hidden');
+        });
+
+        // 导出确认按钮（仅演示，实际导出需要结合Excel/PDF库）
+        document.getElementById('confirm-export').addEventListener('click', function() {
+            alert('导出功能已触发，实际项目中需集成SheetJS/jspdf等库实现文件导出');
+            document.getElementById('export-modal').classList.add('hidden');
+        });
+    </script>
+</body>
+</html>
